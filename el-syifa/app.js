@@ -38,12 +38,24 @@ function loadFonts() {
     l.href = "https://fonts.googleapis.com/css2?family=" + encodeURIComponent(n).replace(/%20/g, "+") + "&display=swap"; document.head.appendChild(l);
   })), qs.has("builder") ? 700 : 0);
 }
+const TPL_FONTS = {
+  glassbox: ["Great Vibes", "Cormorant Garamond:ital,wght@0,400;0,600;1,400", "Plus Jakarta Sans:wght@300;400;600"],
+  exclusive: ["Alike", "Abel"], premium: ["Alike", "Abel", "Great Vibes", "Marcellus", "Lato:wght@400;700;900"],
+  minimalist: ["Jost:wght@300;400;500"], doodle: ["Caveat:wght@500;700", "Patrick Hand"],
+  vintage: ["Playfair Display:ital,wght@0,500;1,500", "Cormorant Garamond:ital,wght@0,400;0,600;1,400"], playful: ["Fredoka:wght@400;500;600"],
+  envelope: ["Pinyon Script", "Playfair Display:wght@500;600", "Cormorant Garamond:wght@400;600"]
+};
+function loadTplFonts() {
+  (TPL_FONTS[TPL] || []).forEach(spec => { if (loadedFonts.has(spec)) return; loadedFonts.add(spec);
+    const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=" + spec.replace(/ /g, "+") + "&display=swap"; document.head.appendChild(l); });
+}
 function applyTheme() {
   document.body.className = document.body.className.replace(/\bt-\S+/g, "").trim();
   document.body.classList.add("t-" + TPL);
   Object.values(cmap).forEach(v => document.body.style.removeProperty(v));
   Object.entries(C.colors || {}).forEach(([k, v]) => v && cmap[k] && document.body.style.setProperty(cmap[k], v));
   loadFonts();
+  loadTplFonts();
 }
 applyTheme();
 
@@ -116,8 +128,11 @@ function profile(key, p, role) {
     <p class="par">${esc(p.father)}<br>&amp; ${esc(p.mother)}</p>${ig(p.ig)}</div>`);
 }
 
-function galGrid(a) { // 2 foto per baris, sisanya ke bawah; tinggi baris bergantian agar rapi
-  let h = "", i = 0, r = 0; const im = (s, c, k) => `<img class="${c}" data-i="${k}" src="${esc(s)}" alt="" loading="lazy">`;
+const isVid = x => /\.(mp4|webm|mov|m4v|ogv)([?#].*)?$/i.test(String(x || ""));
+const media = x => isVid(x) ? `<video src="${esc(x)}#t=0.1" muted playsinline preload="metadata"></video>` : `<img src="${esc(x)}" alt="" loading="lazy">`;
+const mainHTML = x => isVid(x) ? `<video src="${esc(x)}" controls autoplay muted loop playsinline></video>` : `<img src="${esc(x)}" alt="">`;
+function galGrid(a) { // 2 foto/video per baris, sisanya ke bawah; tinggi baris bergantian agar rapi
+  let h = "", i = 0, r = 0; const im = (x, c, k) => `<figure class="gi ${c}" data-i="${k}">${media(x)}${isVid(x) ? '<i class="play">▶</i>' : ""}</figure>`;
   while (i < a.length) {
     if (a.length - i === 1) { h += im(a[i], "w", i); i++; }
     else { const c = r % 2 ? "sq" : "tl"; h += im(a[i], c, i) + im(a[i + 1], c, i + 1); i += 2; }
@@ -126,18 +141,54 @@ function galGrid(a) { // 2 foto per baris, sisanya ke bawah; tinggi baris bergan
   return h;
 }
 let LB_I = 0;
-function lbShow(n) { const lb = document.getElementById("lightbox"), g = C.gallery || []; if (!g.length) return;
-  LB_I = (n + g.length) % g.length; lb.querySelector("img").src = g[LB_I]; lb.hidden = false; }
-addEventListener("keydown", e => { const lb = document.getElementById("lightbox"); if (!lb || lb.hidden) return;
-  if (e.key === "Escape") lb.hidden = true; if (e.key === "ArrowRight") lbShow(LB_I + 1); if (e.key === "ArrowLeft") lbShow(LB_I - 1); });
+function lbShow(n) {
+  const lb = document.getElementById("lightbox"), g = C.gallery || []; if (!g.length) return;
+  const im = lb.querySelector("img"), vd = lb.querySelector("video"); LB_I = (n + g.length) % g.length; const x = g[LB_I];
+  if (isVid(x)) { im.hidden = true; vd.hidden = false; vd.src = x; vd.play().catch(() => {}); }
+  else { vd.pause(); vd.hidden = true; im.hidden = false; im.src = x; }
+  lb.hidden = false;
+}
+function closeLb() { const lb = document.getElementById("lightbox"); lb.hidden = true; lb.querySelector("video").pause(); }
+addEventListener("keydown", e => { const lb = document.getElementById("lightbox"), qm = document.getElementById("qrmodal");
+  if (qm && !qm.hidden && e.key === "Escape") qm.hidden = true;
+  if (!lb || lb.hidden) return;
+  if (e.key === "Escape") closeLb(); if (e.key === "ArrowRight") lbShow(LB_I + 1); if (e.key === "ArrowLeft") lbShow(LB_I - 1); });
 function gallerySec() {
   const g = C.gallery || [], ttl = t(C.galleryTitle) || T().gallery;
   const mode = C.galleryStyle === "carousel" ? "carousel" : "grid", cls = TPL === "glassbox" && !bgOf("gallery").value ? "brush" : "";
   if (mode === "carousel" && g.length) return sec("gallery", cls, title(ttl) +
-    `<div class="car"><img id="car-main" src="${esc(g[0])}" alt=""><button type="button" class="cb prev" id="car-prev" aria-label="Prev">‹</button><button type="button" class="cb next" id="car-next" aria-label="Next">›</button></div>
-     <div class="thumbs" id="thumbs">${g.map((s, i) => `<img class="th${i ? "" : " on"}" data-i="${i}" src="${esc(s)}" alt="" loading="lazy">`).join("")}</div>`);
+    `<div class="car"><div class="cm" id="car-media">${mainHTML(g[0])}</div><button type="button" class="cb prev" id="car-prev" aria-label="Prev">‹</button><button type="button" class="cb next" id="car-next" aria-label="Next">›</button></div>
+     <div class="thumbs" id="thumbs">${g.map((x, i) => `<span class="th${i ? "" : " on"}" data-i="${i}">${media(x)}${isVid(x) ? '<i class="play">▶</i>' : ""}</span>`).join("")}</div>`);
   return sec("gallery", cls, title(ttl) + `<div class="gal">${galGrid(g)}</div>`);
 }
+
+/* ---------- QR undangan (opsional) ---------- */
+const QRD = {
+  line1: { id: "Kami akan menikah dan kamu termasuk dalam", en: "We're tying the knot and you're on" }, line2: { id: "Daftar Tamu!", en: "The Guest List!" },
+  button: { id: "QR Undangan Kamu", en: "Your Invitation QR" }, title: { id: "QR Undangan Kamu", en: "Your Invitation QR" },
+  note: { id: "Tunjukkan QR Code ini kepada tim resepsionis kami saat tiba.", en: "Please show this QR Code to our reception team upon arrival." }
+};
+const qt = k => t((C.qr || {})[k]) || t(QRD[k]);
+const guestName = () => (guest || t((C.cover || {}).guest) || "Guest").trim().slice(0, 40);
+function qrSec() { return sec("qr", "qr", `<p class="q1">${esc(qt("line1"))}</p><p class="q2">${esc(qt("line2"))}</p><button type="button" class="btn" id="qr-open">${esc(qt("button"))}</button>`); }
+function qrText() {
+  const q = C.qr || {}, mode = q.content || "auto", ep = ((C.rsvp || {}).endpoint || "").trim(), name = guestName(), id = qs.get("id") || "", pax = qs.get("pax") || "";
+  const checkin = () => ep + (ep.includes("?") ? "&" : "?") + "checkin=" + encodeURIComponent(name) + (id ? "&id=" + encodeURIComponent(id) : "") + (pax ? "&pax=" + encodeURIComponent(pax) : "");
+  const link = () => { const u = new URL(location.href); u.search = ""; u.hash = ""; return u.href + "?to=" + encodeURIComponent(name).replace(/%20/g, "+"); };
+  const text = () => `${C.couple.names}\nGuest: ${name}` + (id ? `\nID: ${id}` : "") + (pax ? `\nPax: ${pax}` : "");
+  if (mode === "link") return link();
+  if ((mode === "checkin" || mode === "auto") && ep) return checkin();
+  return text();
+}
+function openQR() {
+  const m = document.getElementById("qrmodal"), cv = document.getElementById("qrc");
+  m.querySelector(".qrt").textContent = qt("title");
+  m.querySelector(".qrd").textContent = `${t((C.cover || {}).dear) || "Dear"} ${guestName()}`;
+  m.querySelector(".qrn").textContent = qt("note");
+  try { QRGen.draw(cv, qrText(), 264); } catch (e) { try { QRGen.draw(cv, `${C.couple.names} - ${guestName()}`.slice(0, 120), 264); } catch (e2) {} }
+  m.hidden = false;
+}
+document.getElementById("qrmodal").addEventListener("click", e => { if (e.target.id === "qrmodal" || e.target.closest(".qrx")) e.currentTarget.hidden = true; });
 
 function eventCard(e) {
   const src = e.mapEmbed || `https://maps.google.com/maps?q=${encodeURIComponent(e.mapQuery || e.address || "")}&output=embed`;
@@ -157,7 +208,8 @@ function render() {
   const html = [
     sec("cover", "cover", `<p class="eyebrow">${TPL === "envelope" ? u.wo : cvt("eyebrow", "Wedding Invitation")}</p><h1 class="names">${esc(co.names)}</h1>
       ${env}<div class="guest"><small>${cvt("dear", "Dear")}</small><b>${esc(g)}</b></div><button class="btn" id="open">${cvt("open", "Open Invitation")}</button>`),
-        sec("verse", "", `<p class="quote">${esc(t(C.verse.text))}</p><p class="cite">${esc(t(C.verse.title))}</p><hr class="ln vl">`),
+        ...(C.qr && C.qr.enabled ? [qrSec()] : []),
+    sec("verse", "", `<p class="quote">${esc(t(C.verse.text))}</p><p class="cite">${esc(t(C.verse.title))}</p><hr class="ln vl">`),
     sec("opening", "", `<h2 class="h2">${esc(t(C.opening.title))}</h2><p>${esc(t(C.opening.text))}</p>${C.opening.hashtag ? `<p class="tag">${esc(C.opening.hashtag)}</p>` : ""}`),
     profile("bride", co.bride, u.daughter),
     profile("groom", co.groom, u.son),
@@ -239,6 +291,13 @@ const audio = document.getElementById("audio"), bMusic = document.getElementById
 audio.src = C.music.url || "";
 function setMusic(on) { if (!audio.src) return; (on ? audio.play() : (audio.pause(), Promise.resolve())).then(() => bMusic.classList.toggle("on", on)).catch(() => {}); }
 
+let resumeMusic = false; // musik berhenti saat undangan ditinggalkan (pindah tab/aplikasi), lanjut saat kembali
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { resumeMusic = !audio.paused; if (resumeMusic) setMusic(false); }
+  else if (resumeMusic) { resumeMusic = false; setMusic(true); }
+});
+addEventListener("pagehide", () => audio.pause());
+
 let scrolling = false, raf, acc = 0;
 function setScroll(on) {
   scrolling = on; bScroll.classList.toggle("on", on); cancelAnimationFrame(raf);
@@ -269,19 +328,21 @@ function bind() {
     try { await navigator.clipboard.writeText(n); } catch { const x = document.createElement("textarea"); x.value = n; document.body.appendChild(x); x.select(); document.execCommand("copy"); x.remove(); }
     b.textContent = T().copied; setTimeout(() => b.textContent = T().copy, 1600);
   });
-  const main = document.getElementById("car-main");
-  if (main) {
+  const cm = document.getElementById("car-media");
+  if (cm) {
     const g = C.gallery, th = [...document.querySelectorAll("#thumbs .th")], strip = document.getElementById("thumbs"); let i = 0, x0 = null;
-    const show = n => { i = (n + g.length) % g.length; main.src = g[i]; th.forEach((x, k) => x.classList.toggle("on", k === i));
+    const show = n => { i = (n + g.length) % g.length; cm.innerHTML = mainHTML(g[i]); th.forEach((x, k) => x.classList.toggle("on", k === i));
       strip.scrollTo({ left: th[i].offsetLeft - strip.clientWidth / 2 + th[i].clientWidth / 2, behavior: "smooth" }); };
     document.getElementById("car-prev").onclick = () => show(i - 1); document.getElementById("car-next").onclick = () => show(i + 1);
-    th.forEach((x, k) => x.onclick = () => show(k)); main.onclick = () => lbShow(i);
-    const box = main.parentNode; box.ontouchstart = e => x0 = e.touches[0].clientX;
+    th.forEach((x, k) => x.onclick = () => show(k));
+    cm.onclick = e => { if (e.target.tagName === "IMG") lbShow(i); };
+    const box = cm.parentNode; box.ontouchstart = e => x0 = e.touches[0].clientX;
     box.ontouchend = e => { if (x0 == null) return; const d = e.changedTouches[0].clientX - x0; if (Math.abs(d) > 40) show(i + (d < 0 ? 1 : -1)); x0 = null; };
   }
   const lb = document.getElementById("lightbox");
-  document.querySelectorAll(".gal img").forEach(i => i.onclick = () => lbShow(+i.dataset.i));
-  lb.onclick = e => { const b = e.target.closest("button"); if (b && b.dataset.d) lbShow(LB_I + +b.dataset.d); else if (e.target.tagName !== "IMG") lb.hidden = true; };
+  document.querySelectorAll(".gal .gi").forEach(f => f.onclick = () => lbShow(+f.dataset.i));
+  lb.onclick = e => { const b = e.target.closest("button"); if (b && b.dataset.d) lbShow(LB_I + +b.dataset.d); else if (!["IMG", "VIDEO"].includes(e.target.tagName)) closeLb(); };
+  const qo = document.getElementById("qr-open"); if (qo) qo.onclick = openQR;
 }
 
 document.getElementById("b-lang").onclick = () => { lang = lang === "id" ? "en" : "id"; render(); };
