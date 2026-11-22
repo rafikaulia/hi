@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generator Undangan</title>
+<style>
+*{box-sizing:border-box;margin:0}
+body{font:14px/1.45 system-ui,sans-serif;background:#f3f1ee;color:#222;height:100vh;display:flex;flex-direction:column}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;background:#fff;border-bottom:1px solid #ddd}
+header h1{font-size:16px;margin-right:auto}
+main{flex:1;display:grid;grid-template-columns:minmax(340px,440px) 1fr;min-height:0}
+#panel{overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#faf9f7;border-right:1px solid #ddd}
+#stage{display:flex;align-items:center;justify-content:center;padding:12px;min-height:0;overflow:hidden}
+#pw{position:relative}#phone{width:410px;height:864px;padding:10px;background:#111;border-radius:46px;transform-origin:0 0;box-shadow:0 10px 40px #0004}
+iframe{width:390px;height:844px;border:0;border-radius:36px;background:#fff;display:block}
+details{background:#fff;border:1px solid #ddd;border-radius:10px}
+summary{padding:11px 14px;font-weight:600;cursor:pointer}
+details>div{padding:4px 14px 14px;display:flex;flex-direction:column;gap:10px}
+.f{display:flex;flex-direction:column;gap:3px}.f>span,.bi>b{font-size:12px;color:#666}
+.bi{display:flex;flex-direction:column;gap:6px;padding:8px;background:#f7f5f2;border-radius:8px}
+.row{display:flex;gap:6px}.row input:not([type=color]){flex:1;min-width:0}
+input,select,textarea{font:inherit;padding:7px 9px;border:1px solid #ccc;border-radius:7px;width:100%;background:#fff}
+input[type=color]{width:44px;padding:2px;flex:none}input[type=checkbox]{width:auto}
+button{font:inherit;cursor:pointer;border:1px solid #bbb;background:#fff;border-radius:8px;padding:7px 12px}
+button.pri{background:#222;color:#fff;border-color:#222}
+.mini{padding:5px 9px;font-size:12px;flex:none}.danger{color:#b3261e}
+.item{border:1px dashed #bbb;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:8px}
+.ih{display:flex;justify-content:space-between;align-items:center}
+.add{border-style:dashed;background:#f0ede8}
+.hint{font-size:12px;color:#777}
+@media(max-width:800px){main{grid-template-columns:1fr;overflow:auto}#stage{height:760px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Generator Undangan</h1>
+  <input id="g-prev" placeholder="Tes nama tamu (preview)" style="width:190px">
+  <button id="reset">Reset</button>
+  <button id="copy">Salin config</button>
+  <button id="dl" class="pri">Download config.js</button>
+</header>
+<main>
+  <div id="panel"></div>
+  <div id="stage"><div id="pw"><div id="phone"><iframe id="pv" src="index.html?builder=1" title="Preview"></iframe></div></div></div>
+</main>
+<script src="config.js"></script>
+<script>
+const KEY = "inv_builder_cfg";
+const DEFAULT = JSON.parse(JSON.stringify(window.CONFIG));
+let S; try { S = JSON.parse(localStorage.getItem(KEY)) || JSON.parse(JSON.stringify(DEFAULT)); } catch { S = JSON.parse(JSON.stringify(DEFAULT)); }
+S.colors = S.colors || {}; S.fonts = S.fonts || {}; S.look = S.look || {}; S.photos = S.photos || { profile: true, gallery: true }; S.backgrounds = S.backgrounds || {};
+const TEMPLATES = ["glassbox","exclusive","premium","minimalist","doodle","vintage","playful","envelope"];
+const pv = document.getElementById("pv"), panel = document.getElementById("panel");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const get = p => p.split(".").reduce((o, k) => o?.[k], S);
+const set = (p, v) => { const a = p.split("."); let o = S; a.slice(0, -1).forEach(k => o = (o[k] ??= {})); o[a.at(-1)] = v; changed(); };
+
+/* ---------- preview & simpan ---------- */
+let tm; const send = m => pv.contentWindow && pv.contentWindow.postMessage(m, "*");
+function changed() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} clearTimeout(tm); tm = setTimeout(() => send({ cfg: S }), 150); }
+addEventListener("message", e => { if (e.data && e.data.ready) { send({ cfg: S }); send({ guest: document.getElementById("g-prev").value }); } });
+document.getElementById("g-prev").oninput = e => send({ guest: e.target.value });
+
+/* ---------- pembuat field ---------- */
+const L = (label, inner) => `<label class="f"><span>${label}</span>${inner}</label>`;
+const tx = (p, label, ph = "") => L(label, `<input data-p="${p}" value="${esc(get(p))}" placeholder="${ph}">`);
+const num = (p, label) => L(label, `<input type="number" data-num="1" data-p="${p}" value="${esc(get(p))}">`);
+const chk = (p, label) => `<label class="row" style="align-items:center"><input type="checkbox" data-p="${p}" ${get(p) ? "checked" : ""}> ${label}</label>`;
+const bi = (p, label, area) => `<div class="bi"><b>${label}</b>` + ["id", "en"].map(l => L(l.toUpperCase(),
+  area ? `<textarea rows="3" data-p="${p}.${l}">${esc(get(p + "." + l))}</textarea>` : `<input data-p="${p}.${l}" value="${esc(get(p + "." + l))}">`)).join("") + "</div>";
+const img = (p, label) => L(label, `<div class="row"><input data-p="${p}" value="${esc(get(p))}" placeholder="URL foto atau upload"><button type="button" class="mini" data-up="${p}">Upload</button></div>`);
+const hex = x => /^#[0-9a-f]{6}$/i.test(x || "") ? x : "#cccccc";
+const bgf = k => { const p = `backgrounds.${k}`, b = get(p) || {};
+  return `<div class="bi"><b>Background</b><div class="row"><select data-p="${p}.type">${["color","photo","video"].map(t => `<option value="${t}" ${b.type === t ? "selected" : ""}>${{color:"Warna",photo:"Foto",video:"Video"}[t]}</option>`).join("")}</select>
+  <input type="color" data-color="${p}.value" value="${hex(b.value)}" title="Pilih warna"></div>
+  <div class="row"><input data-p="${p}.value" value="${esc(b.value)}" placeholder="#hex, URL foto, atau URL video (.mp4)"><button type="button" class="mini" data-up="${p}.value">Upload foto</button></div>
+  <span class="hint">Kosongkan = warna bawaan template. Video: isi URL/path file .mp4.</span></div>`; };
+const FONTS = ["Great Vibes","Pinyon Script","Dancing Script","Allura","Parisienne","Sacramento","Alex Brush","Playfair Display","Cormorant Garamond","Cinzel","Lora","Alike","Merriweather","Libre Baskerville","Abel","Jost","Poppins","Montserrat","Lato","Raleway","Caveat","Patrick Hand","Fredoka","Quicksand","Nunito","Amatic SC","Pacifico","Josefin Sans","Plus Jakarta Sans"];
+document.body.insertAdjacentHTML("beforeend", `<datalist id="fl">${FONTS.map(f => `<option value="${f}">`).join("")}</datalist>`);
+const optn = (p, label, ph) => L(label, `<input type="number" min="0" max="300" data-opt="1" data-p="${p}" value="${esc(get(p))}" placeholder="${ph}">`);
+const fontf = (k, label = "Font, ukuran & efek section ini") => `<div class="bi"><b>${label}</b>` +
+  L("Judul / nama", `<input list="fl" data-p="fonts.${k}.head" value="${esc(get(`fonts.${k}.head`))}" placeholder="bawaan template (ketik nama Google Font)">`) +
+  L("Isi teks", `<input list="fl" data-p="fonts.${k}.body" value="${esc(get(`fonts.${k}.body`))}" placeholder="bawaan template">`) +
+  optn(`look.${k}.size`, "Ukuran teks (%), 100 = normal", "100") + optn(`look.${k}.shadow`, "Shadow teks & kartu (0-100)", "0") +
+  optn(`look.${k}.fade`, "Fade: kepekatan lapisan di atas foto/video (%)", "bawaan template") + `</div>`;
+let musicFile = null;
+const musicExt = () => (musicFile.name.split(".").pop() || "mp3").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp3";
+const musicBox = () => `<div class="bi"><b>Upload musik dari komputer</b><input type="file" id="mus" accept="audio/*">
+  <span class="hint">${musicFile ? `Terpilih: ${esc(musicFile.name)}. Dengarkan di preview (tombol ♪). Lalu klik Download dan taruh file itu di folder media/ pada repo GitHub.` : "File musik tidak ditanam di config.js (terlalu besar). Ia jadi file terpisah di folder media/."}</span>
+  ${musicFile ? `<button type="button" class="mini" id="mus-dl">Download music.${musicExt()}</button>` : ""}</div>`;
+const list = (path, name, fn) => (get(path) || []).map((it, i) => `<div class="item"><div class="ih"><b>${name} ${i + 1}</b><button type="button" class="mini danger" data-del="${path}.${i}">Hapus</button></div>${fn(`${path}.${i}`)}</div>`).join("") +
+  `<button type="button" class="add" data-add="${path}">+ Tambah ${name}</button>`;
+const NEW = {
+  events: () => ({ title: {id:"Ngunduh Mantu", en:"Reception"}, date: {id:"", en:""}, time: {id:"", en:""}, place: {id:"", en:""}, address: "", mapQuery: "" }),
+  gifts: () => ({ provider: "", number: "", holder: "" }),
+  loveStory: () => ({ year: "", title: {id:"", en:""}, text: {id:"", en:""} }),
+  gallery: () => ""
+};
+
+/* ---------- panel ---------- */
+const open = new Set(["sticky", "photos", "general"]);
+const D = (id, title, body) => `<details data-sec="${id}" ${open.has(id) ? "open" : ""}><summary>${title}</summary><div>${body}</div></details>`;
+const prof = k => tx(`couple.${k}.name`, "Nama lengkap") + img(`couple.${k}.photo`, "Foto") + tx(`couple.${k}.father`, "Nama ayah") + tx(`couple.${k}.mother`, "Nama ibu") + tx(`couple.${k}.ig`, "Instagram (tanpa @)") + tx(`couple.${k}.nick`, "Nama panggilan (tampil besar di Exclusive)") + bi(`couple.${k}.role`, "Keterangan (mis. Putra pertama dari)") + bgf(k) + fontf(k);
+function renderPanel() {
+  const dt = S.date.iso || "", tz = dt.slice(19) || "+07:00";
+  const SRC = [["verse","Kutipan ayat"],["opening","Kalimat pembuka"],["story","Love story"],["date","Save the date"],["gift","Wedding gift"],["rsvp","RSVP"],["gallery","Galeri"],["closing","Penutup"],["cover","Cover"]];
+  panel.innerHTML = [
+    D("sticky", "Background menempel (sticky)",
+      chk("stickyBg.enabled", "Aktifkan: satu background yang sama terus menempel di semua bagian (video tidak dimuat ulang)") +
+      L("Ambil background dari section", `<select data-p="stickyBg.source">${SRC.map(([v, n]) => `<option value="${v}" ${(get("stickyBg.source") || "verse") === v ? "selected" : ""}>${n}</option>`).join("")}</select>`) +
+      chk("stickyBg.cover", "Cover ikut memakai background ini") +
+      `<span class="hint">Berlaku untuk semua bagian kecuali profil mempelai dan detail acara. Atur foto/video-nya di kotak Background pada section yang dipilih di atas. Kalau dimatikan, tiap section memakai background-nya sendiri.</span>`),
+    D("photos", "Pakai foto?", chk("photos.profile", "Tampilkan foto mempelai") + chk("photos.gallery", "Tampilkan galeri foto") +
+      `<span class="hint">Matikan bila klien tidak ingin memakai foto: foto mempelai disembunyikan dan section galeri dihapus. Background section tetap bisa diatur sendiri (warna/foto/video).</span>`),
+    D("general", "Umum, template & warna",
+      L("Template", `<select data-p="template">${TEMPLATES.map(t => `<option ${S.template === t ? "selected" : ""}>${t}</option>`).join("")}</select>`) +
+      L("Bahasa awal", `<select data-p="defaultLang"><option value="id" ${S.defaultLang === "id" ? "selected" : ""}>Indonesia</option><option value="en" ${S.defaultLang === "en" ? "selected" : ""}>English</option></select>`) +
+      `<div class="bi"><b>Warna (kosong = bawaan template)</b>` + [["accent","Aksen"],["bg","Latar"],["fg","Teks"],["border","Garis"]].map(([k, n]) =>
+        `<div class="row" style="align-items:center"><span style="width:60px">${n}</span><input type="color" data-color="colors.${k}" value="${hex(S.colors[k])}"><input data-p="colors.${k}" value="${esc(S.colors[k])}" placeholder="#hex"></div>`).join("") + `</div>` +
+      tx("music.url", "Lokasi musik (link .mp3 atau media/namafile.mp3)") + musicBox() + chk("music.autoplay", "Putar musik saat undangan dibuka") + fontf("all", "Font, ukuran & efek semua section (bisa ditimpa per section)") + chk("autoscroll", "Autoscroll setelah dibuka") + num("scrollSpeed", "Kecepatan autoscroll (0.3 - 2)")),
+    D("cover", "Cover", tx("couple.names", "Nama di cover (mis. Fadil & Aisyah)") + bi("cover.eyebrow", "Tulisan atas") + bi("cover.dear", "Tulisan sapaan (Dear)") + bi("cover.guest", "Nama tamu bawaan (jika link tanpa ?to=)") + bi("cover.open", "Tulisan tombol") +
+      `<span class="hint">Nama tamu: tambahkan <code>?to=Nama+Tamu</code> di link undangan.</span>` + bgf("cover") + fontf("cover")),
+    D("verse", "Ayat / kutipan", bi("verse.title", "Sumber") + bi("verse.text", "Teks", 1) + bgf("verse") + fontf("verse")),
+    D("opening", "Kalimat pembuka", bi("opening.title", "Judul") + bi("opening.text", "Teks", 1) + tx("opening.hashtag", "Hashtag") + bgf("opening") + fontf("opening")),
+    D("bride", "Mempelai wanita", prof("bride")),
+    D("groom", "Mempelai pria", prof("groom")),
+    D("story", "Love story", list("loveStory", "Cerita", p => tx(p + ".year", "Tahun") + bi(p + ".title", "Judul") + bi(p + ".text", "Isi", 1)) + bgf("story") + fontf("story")),
+    D("date", "Save the date & countdown",
+      L("Tanggal & jam acara utama", `<div class="row"><input type="datetime-local" id="dt" value="${esc(dt.slice(0, 16))}"><select id="tz">${["+07:00:WIB","+08:00:WITA","+09:00:WIT"].map(z => { const [o, n] = [z.slice(0, 6), z.slice(7)]; return `<option value="${o}" ${tz === o ? "selected" : ""}>${n}</option>`; }).join("")}</select></div>`) +
+      bi("date.text", "Teks tanggal (tampil di undangan)") + bgf("date") + fontf("date")),
+    D("events", "Detail acara (Google Maps)", list("events", "Acara", p => bi(p + ".title", "Nama acara") + bi(p + ".date", "Tanggal") + bi(p + ".time", "Waktu") + bi(p + ".place", "Tempat") +
+      tx(p + ".address", "Alamat") + tx(p + ".mapQuery", "Lokasi untuk Google Maps", "mis. Hotel Mulia Senayan") + tx(p + ".mapEmbed", "(opsional) link embed Google Maps") ) + bgf("events") + fontf("events")),
+    D("gift", "Wedding gift", list("gifts", "Rekening", p => tx(p + ".provider", "Bank / e-wallet") + tx(p + ".number", "Nomor") + tx(p + ".holder", "Atas nama (a.n ...)")) + bgf("gift") + fontf("gift")),
+    D("rsvp", "RSVP & ucapan", tx("rsvp.endpoint", "URL Google Apps Script (opsional)") + num("rsvp.maxGuests", "Maksimal jumlah tamu") + bgf("rsvp") + fontf("rsvp")),
+    D("gallery", "Galeri foto", bi("galleryTitle", "Judul galeri") + L("Tampilan galeri", `<select data-p="galleryStyle">${[["grid","Grid 2 kolom (semua foto bisa diklik)"],["carousel","Carousel + thumbnail"]].map(([v, n]) => `<option value="${v}" ${(S.galleryStyle === "carousel" ? "carousel" : "grid") === v ? "selected" : ""}>${n}</option>`).join("")}</select>`) + list("gallery", "Foto", p => img(p, "Foto")) + bgf("gallery") + fontf("gallery")),
+    D("closing", "Kalimat penutup", bi("closing.text", "Teks", 1) + bi("closing.sign", "Salam penutup") + bgf("closing") + fontf("closing"))
+  ].join("");
+}
+
+/* ---------- event ---------- */
+panel.addEventListener("input", e => {
+  const el = e.target;
+  if (el.id === "dt" || el.id === "tz") { const d = document.getElementById("dt").value; if (d) set("date.iso", d + ":00" + document.getElementById("tz").value); return; }
+  if (el.dataset.color) { const p = el.dataset.color; set(p, el.value); if (p.startsWith("backgrounds.")) set(p.replace(/value$/, "type"), "color");
+    const t = panel.querySelector(`[data-p="${p}"]`); if (t) t.value = el.value; const s = panel.querySelector(`[data-p="${p.replace(/value$/, "type")}"]`); if (s && p.startsWith("backgrounds.")) s.value = "color"; return; }
+  const p = el.dataset.p; if (!p) return;
+  set(p, el.type === "checkbox" ? el.checked : el.dataset.opt ? (el.value === "" ? "" : Number(el.value)) : el.dataset.num ? Number(el.value) : el.value);
+});
+panel.addEventListener("toggle", e => { const d = e.target; if (!d.dataset || !d.dataset.sec) return; d.open ? (open.add(d.dataset.sec), send({ goto: d.dataset.sec })) : open.delete(d.dataset.sec); }, true);
+panel.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.id === "mus-dl") { const a = document.createElement("a"); a.href = URL.createObjectURL(musicFile); a.download = "music." + musicExt(); a.click(); }
+  else if (b.dataset.add) { const k = b.dataset.add; (S[k] = S[k] || []).push(NEW[k]()); changed(); renderPanel(); }
+  else if (b.dataset.del) { const a = b.dataset.del.split("."), i = +a.pop(); get(a.join(".")).splice(i, 1); changed(); renderPanel(); }
+  else if (b.dataset.up) upload(b.dataset.up);
+});
+
+panel.addEventListener("change", e => {
+  if (e.target.id !== "mus" || !e.target.files[0]) return;
+  musicFile = e.target.files[0]; set("music.url", "media/music." + musicExt()); renderPanel();
+  const r = new FileReader(); r.onload = () => send({ musicPreview: r.result }); r.readAsDataURL(musicFile);
+});
+function upload(p) {
+  const f = document.createElement("input"); f.type = "file"; f.accept = "image/*";
+  f.onchange = () => { const r = new FileReader(); r.onload = () => { const im = new Image(); im.onload = () => {
+    const sc = Math.min(1, 1000 / Math.max(im.width, im.height)), c = document.createElement("canvas"); c.width = im.width * sc; c.height = im.height * sc;
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+    set(p, c.toDataURL("image/jpeg", .8)); if (p.startsWith("backgrounds.")) set(p.replace(/value$/, "type"), "photo"); renderPanel();
+  }; im.src = r.result; }; r.readAsDataURL(f.files[0]); };
+  f.click();
+}
+
+/* ---------- export ---------- */
+const out = () => "window.CONFIG = " + JSON.stringify(S, null, 2) + ";\n";
+document.getElementById("dl").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([out()], { type: "text/javascript" })); a.download = "config.js"; a.click(); };
+document.getElementById("copy").onclick = async e => { await navigator.clipboard.writeText(out()); e.target.textContent = "Tersalin ✓"; setTimeout(() => e.target.textContent = "Salin config", 1500); };
+document.getElementById("reset").onclick = () => { if (confirm("Kembalikan semua isian ke bawaan?")) { S = JSON.parse(JSON.stringify(DEFAULT)); S.colors = S.colors || {}; changed(); renderPanel(); } };
+
+function fit() { const st = document.getElementById("stage"), s = Math.min(1, (st.clientHeight - 24) / 864, (st.clientWidth - 24) / 410);
+  document.getElementById("phone").style.transform = `scale(${s})`; const pw = document.getElementById("pw"); pw.style.width = 410 * s + "px"; pw.style.height = 864 * s + "px"; }
+addEventListener("resize", fit); fit();
+renderPanel();
+pv.addEventListener("load", () => send({ cfg: S }));
+</script>
+</body>
+</html>
